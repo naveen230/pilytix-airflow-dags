@@ -20,10 +20,10 @@
 
 from __future__ import print_function
 import warnings
-
+from airflow import DAG
 
 from builtins import range
-from airflow.operators.python import (  # noqa
+from airflow.operators.python_operator import (  # noqa
     BranchPythonOperator, PythonOperator, PythonVirtualenvOperator, ShortCircuitOperator,
 )
 from airflow.models import DAG
