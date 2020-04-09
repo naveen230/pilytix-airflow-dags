@@ -1,51 +1,114 @@
-import airflow
-import warnings
-from datetime import timedelta
-from airflow import DAG
-from datetime import datetime, timedelta
-from airflow.operators.dummy_operator import DummyOperator
-#from airflow.providers.cncf.kubernetes.operators.kubernetes_pod import KubernetesPodOperator
-from airflow.contrib.operators import KubernetesOperator
-from airflow.contrib.operators.kubernetes_pod_operator import KubernetesPodOperator
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+"""
+This is an example dag for using the Kubernetes Executor.
+"""
+import os
 
-default_args = {
+from airflow import DAG
+from airflow.example_dags.libs.helper import print_stuff
+from airflow.operators.python_operator import PythonOperator
+from airflow.utils.dates import days_ago
+
+args = {
     'owner': 'airflow',
-    'depends_on_past': False,
-    'start_date': datetime.utcnow(),
-    'email_on_failure': False,
-    'email_on_retry': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5)
+    'start_date': days_ago(2)
 }
 
-dag = DAG(
-    'kubernetes_sample', default_args=default_args, schedule_interval=timedelta(minutes=10))
+with DAG(
+    dag_id='example_kubernetes_executor',
+    default_args=args,
+    schedule_interval=None,
+    tags=['example'],
+) as dag:
 
-start = DummyOperator(task_id='run_this_first', dag=dag)
+    affinity = {
+        'podAntiAffinity': {
+            'requiredDuringSchedulingIgnoredDuringExecution': [
+                {
+                    'topologyKey': 'kubernetes.io/hostname',
+                    'labelSelector': {
+                        'matchExpressions': [
+                            {
+                                'key': 'app',
+                                'operator': 'In',
+                                'values': ['airflow']
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
 
-passing = KubernetesPodOperator(namespace='airflow',
-                          image="python:3.6",
-                          cmds=["python","-c"],
-                          arguments=["print('hello world')"],
-                          labels={"foo": "bar"},
-                          name="passing-test",
-                          task_id="passing-task",
-                          get_logs=True,
-                          dag=dag,
-                          in_cluster=True
-                          )
+    tolerations = [{
+        'key': 'dedicated',
+        'operator': 'Equal',
+        'value': 'airflow'
+    }]
 
-failing = KubernetesPodOperator(namespace='airflow',
-                          image="ubuntu:16.04",
-                          cmds=["python","-c"],
-                          arguments=["print('hello world')"],
-                          labels={"foo": "bar"},
-                          name="fail",
-                          task_id="failing-task",
-                          get_logs=True,
-                          dag=dag,
-                          in_cluster=True
-                          )
+    def use_zip_binary():
+        """
+        Checks whether Zip is installed.
 
-passing.set_upstream(start)
-failing.set_upstream(start)
+        :return: True if it is installed, False if not.
+        :rtype: bool
+        """
+        return_code = os.system("zip")
+        if return_code != 0:
+            raise SystemError("The zip binary is missing")
+
+    # You don't have to use any special KubernetesExecutor configuration if you don't want to
+    start_task = PythonOperator(
+        task_id="start_task",
+        python_callable=print_stuff
+    )
+
+    # But you can if you want to
+    one_task = PythonOperator(
+        task_id="one_task",
+        python_callable=print_stuff,
+        executor_config={"KubernetesExecutor": {"image": "airflow/ci:latest"}}
+    )
+
+    # Use the zip binary, which is only found in this special docker image
+    two_task = PythonOperator(
+        task_id="two_task",
+        python_callable=use_zip_binary,
+        executor_config={"KubernetesExecutor": {"image": "airflow/ci_zip:latest"}}
+    )
+
+    # Limit resources on this operator/task with node affinity & tolerations
+    three_task = PythonOperator(
+        task_id="three_task",
+        python_callable=print_stuff,
+        executor_config={
+            "KubernetesExecutor": {"request_memory": "128Mi",
+                                   "limit_memory": "128Mi",
+                                   "tolerations": tolerations,
+                                   "affinity": affinity}}
+    )
+
+    # Add arbitrary labels to worker pods
+    four_task = PythonOperator(
+        task_id="four_task",
+        python_callable=print_stuff,
+        executor_config={"KubernetesExecutor": {"labels": {"foo": "bar"}}}
+    )
+
+    start_task >> [one_task, two_task, three_task, four_task]
