@@ -18,11 +18,15 @@
 
 """Example DAG demonstrating the usage of the PythonOperator."""
 
+from __future__ import print_function
+from builtins import range
+from airflow.operators import PythonOperator, PythonVirtualenvOperator
+from airflow.models import DAG
+from datetime import datetime, timedelta
+
 import time
 from pprint import pprint
 
-from airflow import DAG
-from airflow.operators.python import PythonOperator, PythonVirtualenvOperator
 from airflow.utils.dates import days_ago
 
 args = {
