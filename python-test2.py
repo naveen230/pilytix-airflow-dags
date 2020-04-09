@@ -31,7 +31,7 @@ args = {
 }
 
 dag = DAG(
-    dag_id='example_python_operator',
+    dag_id='example_python_operator_new',
     default_args=args,
     schedule_interval=None,
     tags=['example']
