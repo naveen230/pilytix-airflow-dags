@@ -18,9 +18,13 @@
 
 """Example DAG demonstrating the usage of the PythonOperator."""
 
+import warnings
+
 from __future__ import print_function
 from builtins import range
-from airflow.operators import PythonOperator, PythonVirtualenvOperator
+from airflow.operators.python import (  # noqa
+    BranchPythonOperator, PythonOperator, PythonVirtualenvOperator, ShortCircuitOperator,
+)
 from airflow.models import DAG
 from datetime import datetime, timedelta
 
