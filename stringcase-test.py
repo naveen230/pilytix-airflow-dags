@@ -17,7 +17,7 @@ args = {
 }
 
 dag = DAG(
-    dag_id='stringcase-test', default_args=args,
+    dag_id='stringcase-test-2', default_args=args,
     schedule_interval=None)
 
 
